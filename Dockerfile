@@ -11,7 +11,7 @@
 #
 # A 403 on pull is stale registry credentials, not the tag: docker logout
 # public.ecr.aws, then build again.
-ARG BASE_IMAGE=public.ecr.aws/e1h7x4a2/plow-cloud-agents:base-8710797b6409c77df560c6198407765d138ea617
+ARG BASE_IMAGE=public.ecr.aws/e1h7x4a2/plow-cloud-agents:base-ef0019372ff8bca593611b31ebd2e08f9f1458ff@sha256:a8a2f97ad78b8192d80a984dce81d3bf5a9a883d18cb7b677704913a09b56aee
 FROM ${BASE_IMAGE}
 
 # No COPY --chmod anywhere in this file. It is BuildKit-only, and a stock Docker
@@ -38,9 +38,10 @@ COPY --chown=0:0 image/status_phrases.yaml /opt/lyra/status_phrases.yaml
 COPY --chown=0:0 scripts/ /opt/lyra/scripts/
 COPY --chown=0:0 tests/ /opt/lyra/tests/
 
-# The leaderboard reporter's client, pinned to the commit the plow-agents README
-# names. Registering the id is a one-off from the host; see the README.
-ADD https://raw.githubusercontent.com/plow-pbc/agent-index-client/f900ff144076f0a766584b6ec4d0993600779b16/standalone/agent_index_client.py /opt/lyra/agent_index_client.py
+# The leaderboard reporter is the base's own (pinned client + s6 "agent-index"
+# service, every 5 minutes). It reads AGENT_ID; the Plow cloud passes no
+# environment, so the id is baked here. Compose sets the same value.
+ENV AGENT_ID=lyra
 
 COPY --chown=0:0 image/cont-init.d/ /etc/cont-init.d/
 COPY --chown=0:0 image/s6-overlay/s6-rc.d/ /etc/s6-overlay/s6-rc.d/
@@ -49,11 +50,8 @@ COPY --chown=0:0 image/s6-overlay/s6-rc.d/ /etc/s6-overlay/s6-rc.d/
 # restat the base's own services and would pass silently if one of ours failed
 # to copy.
 RUN chmod -R 0755 /opt/lyra/scripts /opt/lyra/tests \
- && chmod 0644 /opt/lyra/agent_index_client.py \
  && chmod 0755 /etc/cont-init.d/03-lyra-scripts \
-                /etc/s6-overlay/s6-rc.d/feed-refresh/run \
-                /etc/s6-overlay/s6-rc.d/agent-index/run \
-                /etc/s6-overlay/s6-rc.d/agent-index/finish
+                /etc/s6-overlay/s6-rc.d/feed-refresh/run
 
 # Feed downloads and the domain age cache belong on the volume, so a restart
 # does not go back to the sources for a copy we already have.
